@@ -1,0 +1,5 @@
+__pycache__/
+
+# For now likely needs to be removed check dependency
+.env
+.vscode/

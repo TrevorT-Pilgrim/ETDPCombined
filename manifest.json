@@ -1,0 +1,9 @@
+{
+  "id": "ETDPFusion_ExpandedModule",
+  "name": "ETDP Fusion Expanded Module",
+  "version": "1.0.0",
+  "author": "Pilgrim ETDP",
+  "description": "ETDP Add-in",
+  "entry": "ETDPFusion.py",
+  "runOnStartup": true
+}

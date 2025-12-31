@@ -1,0 +1,10 @@
+{
+    "autodeskProduct": "Fusion360",
+	"type": "addin",
+    "id": "2C8940E1-4F66-40FB-9255-9BED233E7F8E",
+	"author": "Travis Goodyke, Pilgrim Aerospace Fasteners",
+	"description": "Imports recent part data from ETDP SQL Database partSubmissions table into Fusion",
+	"version": "1.0.0",
+	"runOnStartup": false,
+	"supportedOS": "windows|mac"
+}
