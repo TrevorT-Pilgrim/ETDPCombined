@@ -1025,7 +1025,7 @@ def open_cloud_file():
             loggin_utils.log(f"[B2] Timeline at END and saved. Active doc: {app.activeDocument.name}")
 
         # Hand off to your processing step (measure, SQL, balance, cutoff, K-config, B0PP)
-        process_b2_b1_and_knockout(root_folder, target_folder, parts, event_data)
+        #process_b2_b1_and_knockout(root_folder, target_folder, parts, event_data)
         # Build JSON for OpenSeekInspect_main run
 
         pHeadDiam = fetch_event_field_from_sql(event_data, "pHeadDiam", default=None)
@@ -1054,7 +1054,8 @@ def open_cloud_file():
             pLenHF = fetch_event_field_from_sql(event_data, "pShankLenHF", default=None)
 
 
-        #pHeadDiam = fetch_event_field_from_sql(event_data, "pHeadDiam", default=None)
+        pHeadDiam = fetch_event_field_from_sql(event_data, "pHeadDiam", default=None)
+        
 
         if pHeadDiam is not None:
             # Option 1: store back into event_data so JSON can see it
@@ -1082,6 +1083,14 @@ def open_cloud_file():
                 pRecShape=pRecShape,
                 pRecSpec=pRecSpec
             )
+
+            # create_inputs_json(...) already ran above
+
+            insert_code_path = r"P:\ETDP\Scripts\PythonScripts\InsertCode\InsertCode.py"
+            report = file_ops.run_external_insertcode_fresh(insert_code_path)
+            loggin_utils.log(f"[InsertCode] {report}")
+
+
         except Exception:
             loggin_utils.log("[json] create_inputs_json failed (non-fatal).")
     except Exception as e:
