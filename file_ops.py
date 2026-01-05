@@ -1,6 +1,7 @@
 import adsk.core, adsk.fusion, traceback, time, re
 from decimal import Decimal, ROUND_HALF_UP, ROUND_HALF_EVEN
 from . import loggin_utils
+import os, sys, types, importlib, importlib.util
 
 # --- Name helpers ---
 # Accepts K-0290-0760-RND or K-03225-1145-RND (4 or 5 digits per token)
@@ -1062,3 +1063,85 @@ def move_timeline_to_end() -> bool:
     except Exception as e:
         loggin_utils.log(f"[timeline] move to end failed: {e}\n{traceback.format_exc()}")
         return False
+
+def run_external_insertcode_fresh(insert_code_path: str) -> str:
+    """
+    Runs InsertCode.py by absolute path as a fresh synthetic package so:
+    - relative imports inside InsertCode work
+    - python module caching cannot cause old versions to run
+    Returns a short status string (also logs to Text Commands via print()).
+    """
+    app = adsk.core.Application.get()
+    ui  = app.userInterface
+
+    if not insert_code_path or not os.path.isfile(insert_code_path):
+        return f"❌ InsertCode not found: {insert_code_path}"
+
+    script_dir  = os.path.dirname(insert_code_path)      # ...\InsertCode
+    parent_dir  = os.path.dirname(script_dir)            # ...\PythonScripts
+    file_base   = os.path.splitext(os.path.basename(insert_code_path))[0]
+
+    base_package_name = "InsertCode"
+    unique_pkg = f"{base_package_name}_RUNTIME_{int(time.time() * 1000)}"
+    fqmn = f"{unique_pkg}.{file_base}"
+
+    try:
+        # Ensure parent dir is importable FIRST
+        if parent_dir in sys.path:
+            sys.path.remove(parent_dir)
+        sys.path.insert(0, parent_dir)
+
+        # Purge cached modules related to InsertCode (and our unique run pkg)
+        for name in list(sys.modules.keys()):
+            if (
+                name == base_package_name
+                or name.startswith(base_package_name + ".")
+                or name == unique_pkg
+                or name.startswith(unique_pkg + ".")
+            ):
+                del sys.modules[name]
+
+        try:
+            importlib.invalidate_caches()
+        except Exception:
+            pass
+
+        # Create synthetic package for relative imports
+        pkg = types.ModuleType(unique_pkg)
+        pkg.__path__ = [script_dir]  # type: ignore[attr-defined]
+        sys.modules[unique_pkg] = pkg
+
+        spec = importlib.util.spec_from_file_location(fqmn, insert_code_path)
+        if spec is None or spec.loader is None:
+            return f"❌ Failed to create spec for: {insert_code_path}"
+
+        mod = importlib.util.module_from_spec(spec)
+        mod.__package__ = unique_pkg
+        sys.modules[fqmn] = mod
+
+        print("--------------------------------------------------")
+        print("[ETDPFusion → InsertCode external runner]")
+        print(" Executing file:", insert_code_path)
+        print(" Package name:  ", unique_pkg)
+        print(" Module name:   ", fqmn)
+        print(" File mtime:    ", time.ctime(os.path.getmtime(insert_code_path)))
+        print("--------------------------------------------------")
+
+        spec.loader.exec_module(mod)  # type: ignore
+
+        if not hasattr(mod, "run"):
+            return f"❌ InsertCode has no run(context): {insert_code_path}"
+
+        # Small settle (mirrors manual “Fusion is idle”)
+        try:
+            adsk.doEvents()
+        except Exception:
+            pass
+        time.sleep(0.25)
+
+        mod.run("")
+
+        return "✅ InsertCode ran (external fresh load)"
+
+    except Exception:
+        return "❌ InsertCode external run failed:\n" + traceback.format_exc()
