@@ -1025,7 +1025,7 @@ def open_cloud_file():
             loggin_utils.log(f"[B2] Timeline at END and saved. Active doc: {app.activeDocument.name}")
 
         # Hand off to your processing step (measure, SQL, balance, cutoff, K-config, B0PP)
-        #process_b2_b1_and_knockout(root_folder, target_folder, parts, event_data)
+        row_name_b0pp = process_b2_b1_and_knockout(root_folder, target_folder, parts, event_data)
         # Build JSON for OpenSeekInspect_main run
 
         pHeadDiam = fetch_event_field_from_sql(event_data, "pHeadDiam", default=None)
@@ -1048,6 +1048,7 @@ def open_cloud_file():
 
         pRecSpec = fetch_event_field_from_sql(event_data, "pRecSpec", default=None)
 
+        varName = fetch_event_field_from_sql(event_data, "varName", default=None)
 
         if (pLen == "NA"):
             pLen = fetch_event_field_from_sql(event_data, "pShankLen", default=None)
@@ -1086,6 +1087,8 @@ def open_cloud_file():
 
             # create_inputs_json(...) already ran above
 
+            draw_doc = app.activeDocument  # must be the drawing at capture time
+
             insert_code_path = r"P:\ETDP\Scripts\PythonScripts\InsertCode\InsertCode.py"
             report = file_ops.run_external_insertcode_fresh(insert_code_path)
             loggin_utils.log(f"[InsertCode] {report}")
@@ -1093,6 +1096,48 @@ def open_cloud_file():
             insert_code_path = r"P:\ETDP\Scripts\PythonScripts\PartAssemblyCode\PartAssemblyCode.py"
             report = file_ops.run_external_insertcode_fresh(insert_code_path)
             loggin_utils.log(f"[PartAssembly] {report}")
+
+            if draw_doc:
+                draw_doc.activate()
+
+            try:
+                PY_EXE     = r"C:\Users\ETDP\AppData\Local\Programs\Python\Python313\python.exe"
+                SQL_CREATE = r"P:\ETDP\Scripts\AutomateScripts\sql_create.py"
+
+                # Optional: set varname dynamically later (your sql_create.py supports env override)
+                # If you want to keep 'ps12' just leave this commented.
+                # desired_varname = (row_name_b0pp or "").strip() or "ps12"
+                # env = {**os.environ, "PARTSUB_VARNAME": desired_varname}
+                env = os.environ.copy()  # uses default 'ps12' inside sql_create.py
+                
+                try:
+                    from .sql_create import export_part_and_material  # adjust import if needed
+
+                    desired_varname = (varName or "").strip()
+                    if not desired_varname:
+                        raise RuntimeError("row_name_b0pp is empty; cannot export CSVs")
+
+                    part_csv, mat_csv = export_part_and_material(desired_varname)
+
+                    loggin_utils.log(
+                        f"[B0PP] CSVs created:\n"
+                        f"  part={part_csv}\n"
+                        f"  mat={mat_csv}"
+                    )
+
+                    if part_csv and not os.path.exists(part_csv):
+                        loggin_utils.log(f"[B0PP][WARN] Part CSV not found on disk: {part_csv}")
+                    if mat_csv and not os.path.exists(mat_csv):
+                        loggin_utils.log(f"[B0PP][WARN] Material CSV not found on disk: {mat_csv}")
+
+                except Exception as e:
+                    loggin_utils.log(
+                        f"[B0PP] export_part_and_material failed for varName='{varName}': "
+                        f"{e}\n{traceback.format_exc()}"
+                    )
+            except Exception as e:
+                loggin_utils.log(f"[B0PP] Exception running sql_create.py: {e}\n{traceback.format_exc()}")
+    # ---------------------------------------------------------------------------
 
         except Exception:
             loggin_utils.log("[json] create_inputs_json failed (non-fatal).")
@@ -1874,44 +1919,7 @@ def process_b2_b1_and_knockout(root_folder, target_folder, parts, event_data):
             loggin_utils.log(f"[B0PP] Drawing update to latest -> {'OK' if upd_ok else 'FAILED/NO-OP'}")
         
         #unsure if the above is working below is to create the .csv
-        try:
-            PY_EXE     = r"C:\Users\ETDP\AppData\Local\Programs\Python\Python313\python.exe"
-            SQL_CREATE = r"P:\ETDP\Scripts\AutomateScripts\sql_create.py"
-
-            # Optional: set varname dynamically later (your sql_create.py supports env override)
-            # If you want to keep 'ps12' just leave this commented.
-            # desired_varname = (row_name_b0pp or "").strip() or "ps12"
-            # env = {**os.environ, "PARTSUB_VARNAME": desired_varname}
-            env = os.environ.copy()  # uses default 'ps12' inside sql_create.py
-            
-            try:
-                from .sql_create import export_part_and_material  # adjust import if needed
-
-                desired_varname = (row_name_b0pp or "").strip()
-                if not desired_varname:
-                    raise RuntimeError("row_name_b0pp is empty; cannot export CSVs")
-
-                part_csv, mat_csv = export_part_and_material(desired_varname)
-
-                loggin_utils.log(
-                    f"[B0PP] CSVs created:\n"
-                    f"  part={part_csv}\n"
-                    f"  mat={mat_csv}"
-                )
-
-                if part_csv and not os.path.exists(part_csv):
-                    loggin_utils.log(f"[B0PP][WARN] Part CSV not found on disk: {part_csv}")
-                if mat_csv and not os.path.exists(mat_csv):
-                    loggin_utils.log(f"[B0PP][WARN] Material CSV not found on disk: {mat_csv}")
-
-            except Exception as e:
-                loggin_utils.log(
-                    f"[B0PP] export_part_and_material failed for varName='{row_name_b0pp}': "
-                    f"{e}\n{traceback.format_exc()}"
-                )
-        except Exception as e:
-            loggin_utils.log(f"[B0PP] Exception running sql_create.py: {e}\n{traceback.format_exc()}")
-# ---------------------------------------------------------------------------
+        return row_name_b0pp
     except Exception as e:
         loggin_utils.log(f"Exception in process_b2_b1_and_knockout(): {e}\n{traceback.format_exc()}")
 
